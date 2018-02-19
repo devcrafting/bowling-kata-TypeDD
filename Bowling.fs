@@ -63,19 +63,25 @@ let score game =
         | LastSpare (fst, bonus) -> 10 + toInt' bonus, toInt fst, 10 - toInt fst 
         | LastRoll (fst, snd) -> toInt fst + toInt snd, toInt fst, toInt snd 
     let rec score' acc = function
-        | Strike::(Strike::Strike::_ as tail) -> score' (acc + 30) tail
-        | Strike::(Strike::Spare fst::_ as tail) -> score' (acc + 20 + toInt fst) tail
-        | Strike::(Strike::Roll (fst, _)::_ as tail) -> score' (acc + 20 + toInt fst) tail
-        | Strike::[Strike] -> acc + 20 + lastFrameFirstBall
-        | Strike::(Spare _::_ as tail) -> score' (acc + 20) tail
-        | Strike::(Roll (fst, snd)::_ as tail) -> score' (acc + 10 + toInt fst + toInt snd) tail
-        | [Strike] -> acc + 10 + lastFrameFirstBall + lastFrameSecondBall
-
-        | Spare _::(Strike::_ as tail) -> score' (acc + 20) tail
-        | Spare _::(Spare firstBall::_ as tail) -> score' (acc + 10 + toInt firstBall) tail
-        | Spare _::(Roll (fst, _)::_ as tail) -> score' (acc + 10 + toInt fst) tail
-        | [Spare _] -> acc + 10 + lastFrameFirstBall
-        
+        | Strike::tail -> 
+            let nextRoll, nextNextRoll, nextFrames =
+                match tail with
+                | Strike::Strike::_ -> 10, 10, tail
+                | Strike::Spare fst::_
+                | Strike::Roll (fst, _)::_ -> 10, toInt fst, tail
+                | [Strike] -> 10, lastFrameFirstBall, []
+                | Spare _::_ -> 10, 0, tail
+                | Roll (fst, snd)::_ -> toInt fst, toInt snd, tail
+                | [] -> lastFrameFirstBall, lastFrameSecondBall, tail
+            score' (acc + 10 + nextRoll + nextNextRoll) nextFrames            
+        | Spare _::tail ->
+            let nextRoll =
+                match tail with
+                | Strike::_ -> 10
+                | Spare fst::_
+                | Roll (fst, _)::_ -> toInt fst
+                | [] -> lastFrameFirstBall
+            score' (acc + 10 + nextRoll) tail            
         | Roll (fst, snd)::tail -> score' (acc + toInt fst + toInt snd) tail
         | [] -> acc
     lastFrameScore + score' 0 frames
