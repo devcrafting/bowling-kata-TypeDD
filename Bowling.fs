@@ -1,10 +1,22 @@
 module Bowling
 
+type NbPins = private NbPins of int
+
+module NbPins = 
+    let from char =
+        match char with
+        | '-' -> NbPins 0
+        | _ ->
+            let i = int char - 48
+            if i < 0 || i > 9 then 
+                failwithf "%c is not a valid nb pins" char
+            NbPins i
+    let value (NbPins nb) = nb        
+
 type Frame =
     | Strike
     | Spare of firstRoll:NbPins
     | Roll of firstRoll:NbPins * secondRoll:NbPins
-and NbPins = Miss | One | Two | Three | Four | Five | Six | Seven | Eight | Nine
 
 type LastFrame =
     | LastStrike of firstBonusBall:BonusBallNbPins * secondBonusBall:BonusBallNbPins
@@ -15,44 +27,32 @@ and BonusBallNbPins = NbPins of NbPins | All
 type Game = private Game of Frame list * LastFrame
 
 module Game = 
-    let private nbPinsFrom = function
-        | '-' -> Miss
-        | '1' -> One
-        | '3' -> Three
-        | '5' -> Five
-        | '9' -> Nine
     let private bonusBallNbPinsFrom = function
         | 'X' -> All
-        | nb -> NbPins <| nbPinsFrom nb
+        | nb -> NbPins <| NbPins.from nb
     let rec private create' frames lastFrame = function
         | ['X'; 'X'; 'X'] ->
             frames, Some <| LastStrike (All, All)
         | [firstRoll; '/'; nb] ->
-            frames, Some <| LastSpare (nbPinsFrom firstRoll, bonusBallNbPinsFrom nb)
+            frames, Some <| LastSpare (NbPins.from firstRoll, bonusBallNbPinsFrom nb)
         | [firstRoll; secondRoll] -> 
-            frames, Some <| LastRoll (nbPinsFrom firstRoll, nbPinsFrom secondRoll)
+            frames, Some <| LastRoll (NbPins.from firstRoll, NbPins.from secondRoll)
         | 'X'::tail ->
             let frames = frames @ [Strike]
             create' frames lastFrame tail
         | firstRoll::'/'::tail ->
-            let frames = frames @ [Spare <| nbPinsFrom firstRoll]
+            let frames = frames @ [Spare <| NbPins.from firstRoll]
             create' frames lastFrame tail
         | firstRoll::secondRoll::tail -> 
-            let frames = frames @ [Roll (nbPinsFrom firstRoll, nbPinsFrom secondRoll)] 
+            let frames = frames @ [Roll (NbPins.from firstRoll, NbPins.from secondRoll)] 
             create' frames lastFrame tail
         | _ -> failwith "Unknown rolls"
     let create array =
         let (frames, Some lastFrame) = create' [] None array
         frames, lastFrame
 
-let toInt = function
-    | Miss -> 0
-    | One -> 1
-    | Two -> 2
-    | Three -> 3
-    | Five -> 5
 let toInt' = function
-    | NbPins nb -> toInt nb
+    | NbPins nb -> NbPins.value nb
     | All -> 10
 
 let score game =
@@ -60,18 +60,18 @@ let score game =
     let lastFrameScore, lastFrameFirstBall, lastFrameSecondBall =
         match lastFrame with
         | LastStrike (bonus1, bonus2) -> 10 + toInt' bonus1 + toInt' bonus2, 10, toInt' bonus1
-        | LastSpare (fst, bonus) -> 10 + toInt' bonus, toInt fst, 10 - toInt fst 
-        | LastRoll (fst, snd) -> toInt fst + toInt snd, toInt fst, toInt snd 
+        | LastSpare (fst, bonus) -> 10 + toInt' bonus, NbPins.value fst, 10 - NbPins.value fst 
+        | LastRoll (fst, snd) -> NbPins.value fst + NbPins.value snd, NbPins.value fst, NbPins.value snd 
     let rec score' acc = function
         | Strike::tail -> 
             let nextRoll, nextNextRoll, nextFrames =
                 match tail with
                 | Strike::Strike::_ -> 10, 10, tail
                 | Strike::Spare fst::_
-                | Strike::Roll (fst, _)::_ -> 10, toInt fst, tail
+                | Strike::Roll (fst, _)::_ -> 10, NbPins.value fst, tail
                 | [Strike] -> 10, lastFrameFirstBall, []
                 | Spare _::_ -> 10, 0, tail
-                | Roll (fst, snd)::_ -> toInt fst, toInt snd, tail
+                | Roll (fst, snd)::_ -> NbPins.value fst, NbPins.value snd, tail
                 | [] -> lastFrameFirstBall, lastFrameSecondBall, tail
             score' (acc + 10 + nextRoll + nextNextRoll) nextFrames            
         | Spare _::tail ->
@@ -79,10 +79,10 @@ let score game =
                 match tail with
                 | Strike::_ -> 10
                 | Spare fst::_
-                | Roll (fst, _)::_ -> toInt fst
+                | Roll (fst, _)::_ -> NbPins.value fst
                 | [] -> lastFrameFirstBall
             score' (acc + 10 + nextRoll) tail            
-        | Roll (fst, snd)::tail -> score' (acc + toInt fst + toInt snd) tail
+        | Roll (fst, snd)::tail -> score' (acc + NbPins.value fst + NbPins.value snd) tail
         | [] -> acc
     lastFrameScore + score' 0 frames
 
